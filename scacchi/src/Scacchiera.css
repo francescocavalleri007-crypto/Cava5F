@@ -84,6 +84,28 @@
   background-color: #45a049;
 }
 
-.reset-btn:active {
+.flip-btn:active {
+  transform: scale(0.95);
+}
+
+.flip-btn {
+  background-color: #1f568d; 
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 15px;
+  transition: background-color 0.2s, transform 0.1s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.flip-btn:hover {
+  background-color: #1f568c;
+}
+
+.flip-btn:active {
   transform: scale(0.95);
 }
