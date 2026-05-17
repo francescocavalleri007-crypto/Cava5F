@@ -1,0 +1,84 @@
+body {
+  margin: 0;
+  background-color: #0b2516; /* Verde scuro feltro */
+  color: #fff;
+  font-family: sans-serif;
+}
+
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+header h1 {
+  text-align: center;
+  color: #10b981;
+}
+
+.table-center {
+  background: rgba(0, 0, 0, 0.3);
+  border: 3px solid #10b981;
+  border-radius: 50%; /* Tavolo rotondo */
+  height: 300px;
+  margin: 40px auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 600px;
+}
+
+.played-cards {
+  display: flex;
+  gap: 15px;
+}
+
+.card-mini, .game-card {
+  background: white;
+  color: black;
+  padding: 15px 10px;
+  border-radius: 8px;
+  font-weight: bold;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  border: 2px solid #ccc;
+}
+
+.game-card.playable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.game-card.playable:hover {
+  transform: translateY(-15px);
+  border-color: #10b981;
+}
+
+.game-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cards-container {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.bidding-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bidding-card {
+  background: #1e293b;
+  padding: 40px;
+  border-radius: 12px;
+  text-align: center;
+  border: 2px solid #10b981;
+}
