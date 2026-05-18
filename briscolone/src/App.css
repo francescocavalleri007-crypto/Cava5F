@@ -82,3 +82,31 @@ header h1 {
   text-align: center;
   border: 2px solid #10b981;
 }
+
+
+/* STILI MOBILI EXTRA COMPATTI */
+@media screen and (max-width: 768px) {
+.app-container { padding: 2px !important; }
+header { flex-direction: column; gap: 4px; padding: 4px 8px !important; text-align: center; }
+header h1 { font-size: 18px !important; margin: 0; }
+.game-info { padding: 6px !important; margin-bottom: 8px !important; }
+.game-info h2 { font-size: 14px !important; }
+.game-info h3 { font-size: 13px !important; }
+.game-info p { font-size: 11px !important; margin: 2px 0 !important; }
+.players-scores { gap: 4px !important; margin-bottom: 10px !important; }
+.players-scores > div { flex: 1 1 calc(33% - 4px); padding: 4px 2px !important; font-size: 10px !important; }
+.players-scores > div div { font-size: 12px !important; }
+.table-center { padding: 8px !important; min-height: 140px !important; }
+.table-center h3 { font-size: 11px !important; margin-bottom: 5px !important; }
+.played-cards { gap: 4px !important; }
+.played-cards img { width: 42px !important; height: 65px !important; }
+.played-cards div { font-size: 9px !important; }
+.local-player-hand h3 { font-size: 12px !important; margin-bottom: 3px !important; }
+.cards-container { display: flex !important; justify-content: center !important; gap: -20px !important; overflow-x: auto !important; padding: 5px 2px !important; white-space: nowrap; }
+.cards-container img { width: 52px !important; height: 80px !important; transition: transform 0.2s; }
+.cards-container button:active img { transform: translateY(-10px); }
+.bidding-overlay { padding: 10px !important; margin: 5px auto !important; width: 100% !important; }
+.bidding-overlay h2 { font-size: 16px !important; }
+.bidding-overlay button { padding: 6px 8px !important; font-size: 11px !important; flex: 1 1 calc(25% - 4px); }
+.bidding-overlay img { width: 38px !important; height: 58px !important; }
+}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
