@@ -131,7 +131,7 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
       <h2 style={{ textAlign: 'center', margin: '0 0 15px 0' }}>📢 Fase di Asta</h2>
       
       <div style={{ background: '#0f172a', padding: '12px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center' }}>
-        <p style={{ margin: '4px 0' }}>Carta sotto asta: <strong style={{ color: '#f59e0b', fontSize: '18px' }}>{nomiValori[valoreAttuale] || 'Nessuna (Piatto ricco!)'}</strong></p>
+        <p style={{ margin: '4px 0' }}>Carta sotto asta: <strong style={{ color: '#f59e0b', fontSize: '18px' }}>{nomiValori[valoreAttuale] || 'Nessuna'}</strong></p>
         <p style={{ margin: '4px 0' }}>Punti attuali della carta: <strong style={{ color: '#3b82f6', fontSize: '18px' }}>{puntiAttuali}</strong></p>
         <p style={{ margin: '4px 0', fontSize: '14px', color: '#94a3b8' }}>Miglior offerente attuale: <strong>{giocatori[gameState?.chiamante]?.nome || 'Nessuno'}</strong></p>
         <p style={{ margin: '4px 0', fontSize: '14px', color: '#10b981' }}>Tocca a: <strong>{giocatori[gameState?.giocatore_corrente]?.nome || gameState?.giocatore_corrente}</strong></p>
