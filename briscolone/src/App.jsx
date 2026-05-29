@@ -13,88 +13,114 @@ function App() {
 
   const { gameState, loading, updateGame } = useGameState(gameId);
 
-  // Riferimento per avere sempre lo stato aggiornato dentro i timer ed eventi del browser
+  // Stati per la gestione del popup password oscurato 🔐
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, type: '' });
+  const [passwordInput, setPasswordInput] = useState('');
+
   const gameStateRef = useRef(gameState);
+  const lastPingsRef = useRef({});
+
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
 
-  // 1. HEARTBEAT + CASSAFORTE PER CHIUSURA SCHEDA ISTANTANEA
+  // CONTROLLER DI ESPULSIONE INTELLIGENTE A TIMESTAMP
   useEffect(() => {
-    if (!localPlayerId) return;
+    if (!gameState || !localPlayerId) return;
+    
+    const serverResetTime = gameState.resetTimestamp || 0;
+    const localLoginTime = Number(localStorage.getItem(`briscola_login_time_${gameId}`)) || 0;
+    
+    if (serverResetTime > localLoginTime) {
+      localStorage.removeItem(`briscola_player_${gameId}`);
+      localStorage.removeItem(`briscola_login_time_${gameId}`);
+      setLocalPlayerId(null);
+    }
+  }, [gameState?.resetTimestamp, localPlayerId]);
 
-    // Funzione per dire a Firebase "sono vivo"
+  // HEARTBEAT AD INCREMENTO IMMUNE AL CLOCK DRIFT
+  useEffect(() => {
+    if (!gameState || !localPlayerId) return;
+
+    const serverResetTime = gameState.resetTimestamp || 0;
+    const localLoginTime = Number(localStorage.getItem(`briscola_login_time_${gameId}`)) || 0;
+    if (serverResetTime > localLoginTime) return; 
+
     const inviaSegnoDiVita = async () => {
+      const attualeCount = gameStateRef.current?.Players?.[localPlayerId]?.ping_count || 0;
       await updateGame({
-        [`Players.${localPlayerId}.ultimo_ping`]: Date.now(),
+        [`Players.${localPlayerId}.ping_count`]: attualeCount + 1,
         [`Players.${localPlayerId}.occupato`]: true
-      });
-    };
-
-    // FUNZIONE FULMINEA: Viene eseguita all'istante quando si chiude la SCHEDA o la PAGINA
-    const liberaPostoSuChiusuraScheda = () => {
-      // Usiamo una scrittura diretta senza await perché la scheda sta morendo
-      updateGame({
-        [`Players.${localPlayerId}.occupato`]: false,
-        [`Players.${localPlayerId}.ultimo_ping`]: 0
       });
     };
 
     inviaSegnoDiVita();
     const interval = setInterval(inviaSegnoDiVita, 5000); 
 
-    // Ascoltiamo quando l'utente chiude la scheda, cambia pagina o chiude il browser
-    window.addEventListener('beforeunload', liberaPostoSuChiusuraScheda);
-    window.addEventListener('pagehide', liberaPostoSuChiusuraScheda);
+    return () => clearInterval(interval);
+  }, [localPlayerId, gameState?.resetTimestamp]); 
 
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('beforeunload', liberaPostoSuChiusuraScheda);
-      window.removeEventListener('pagehide', liberaPostoSuChiusuraScheda);
-    };
-  }, [localPlayerId]); 
-
-  // 2. LO SPAZZINO DI EMERGENZA (Se il browser crasha o internet si disconnette senza lanciare gli eventi sopra)
+  // PULIZIA AUTOMATICA DEI FANTASMI
   useEffect(() => {
-    const spazzaFantasmi = () => {
-      const attualeStato = gameStateRef.current;
-      if (!attualeStato) return;
+    if (localPlayerId) return; 
 
-      const oraAttuale = Date.now();
-      const TIMEOUT = 14000; 
-      const giocatori = attualeStato.Players || {};
+    const interval = setInterval(() => {
+      const currentGameState = gameStateRef.current;
+      if (!currentGameState) return;
+
+      const giocatori = currentGameState.Players || {};
+      const updates = {};
+      let serveAggiornamento = false;
 
       Object.entries(giocatori).forEach(([id, dati]) => {
-        if (id === localPlayerId) return;
+        if (dati.occupato) {
+          const currentCount = dati.ping_count || 0;
+          
+          if (!lastPingsRef.current[id]) {
+            lastPingsRef.current[id] = { count: currentCount, missed: 0 };
+          } else if (lastPingsRef.current[id].count === currentCount) {
+            lastPingsRef.current[id].missed += 1;
+          } else {
+            lastPingsRef.current[id].count = currentCount;
+            lastPingsRef.current[id].missed = 0;
+          }
 
-        if (dati.occupato && dati.ultimo_ping && (oraAttuale - dati.ultimo_ping) > TIMEOUT) {
-          updateGame({
-            [`Players.${id}.occupato`]: false,
-            [`Players.${id}.ultimo_ping`]: 0
-          });
+          if (lastPingsRef.current[id].missed >= 3) {
+            updates[`Players.${id}.occupato`] = false;
+            updates[`Players.${id}.ping_count`] = 0;
+            serveAggiornamento = true;
+            delete lastPingsRef.current[id];
+          }
+        } else {
+          delete lastPingsRef.current[id];
         }
       });
-    };
 
-    const interval = setInterval(spazzaFantasmi, 4000);
+      if (serveAggiornamento) {
+        updateGame(updates);
+      }
+    }, 5000);
+
     return () => clearInterval(interval);
   }, [localPlayerId]);
 
   const giocatori = gameState?.Players || {};
-  const conteggioOccupati = Object.values(giocatori).filter(p => p.occupato === true).length;
-  const stanzaPiena = conteggioOccupati >= 3; 
 
-  const gestisciDistribuzioneCarte = async () => {
-    if (stanzaPiena) {
-      alert("Cosa pensi di fare? 🧐 Ci sono già dei giocatori attivi, non si resetta un bel niente!");
-      return;
-    }
+  // LOGICA COMUNE DI GENERAZIONE E DISTRIBUZIONE DEL MAZZO
+  const eseguiMixEMazzo = async () => {
+    const nomiAttuali = {
+      G1: gameStateRef.current?.Players?.G1?.nome || "Giocatore 1",
+      G2: gameStateRef.current?.Players?.G2?.nome || "Giocatore 2",
+      G3: gameStateRef.current?.Players?.G3?.nome || "Giocatore 3",
+      G4: gameStateRef.current?.Players?.G4?.nome || "Giocatore 4",
+      G5: gameStateRef.current?.Players?.G5?.nome || "Giocatore 5",
+    };
 
     const semi = ['O', 'C', 'S', 'B']; 
     const mazzo = [];
     for (const seme of semi) {
       for (let valore = 1; valore <= 10; valore++) {
-        mazzo.push(`${valore}_${seme}`); 
+        mazzo.push(`${seme}_${valore}`); 
       }
     }
     for (let i = mazzo.length - 1; i > 0; i--) {
@@ -102,23 +128,13 @@ function App() {
       [mazzo[i], mazzo[j]] = [mazzo[j], mazzo[i]];
     }
 
-    const nomiAttuali = {
-      G1: gameState?.Players?.G1?.nome || "Giocatore 1",
-      G2: gameState?.Players?.G2?.nome || "Giocatore 2",
-      G3: gameState?.Players?.G3?.nome || "Giocatore 3",
-      G4: gameState?.Players?.G4?.nome || "Giocatore 4",
-      G5: gameState?.Players?.G5?.nome || "Giocatore 5",
-    };
-
     const nuoviPlayers = {
-      G1: { nome: nomiAttuali.G1, carte: mazzo.slice(0, 8), punti_fatti: 0, occupato: false, ultimo_ping: 0 },
-      G2: { nome: nomiAttuali.G2, carte: mazzo.slice(8, 16), punti_fatti: 0, occupato: false, ultimo_ping: 0 },
-      G3: { nome: nomiAttuali.G3, carte: mazzo.slice(16, 24), punti_fatti: 0, occupato: false, ultimo_ping: 0 },
-      G4: { nome: nomiAttuali.G4, carte: mazzo.slice(24, 32), punti_fatti: 0, occupato: false, ultimo_ping: 0 },
-      G5: { nome: nomiAttuali.G5, carte: mazzo.slice(32, 40), punti_fatti: 0, occupato: false, ultimo_ping: 0 },
+      G1: { nome: nomiAttuali.G1, carte: mazzo.slice(0, 8), punti_fatti: 0, occupato: gameStateRef.current?.Players?.G1?.occupato || false, ping_count: gameStateRef.current?.Players?.G1?.ping_count || 0 },
+      G2: { nome: nomiAttuali.G2, carte: mazzo.slice(8, 16), punti_fatti: 0, occupato: gameStateRef.current?.Players?.G2?.occupato || false, ping_count: gameStateRef.current?.Players?.G2?.ping_count || 0 },
+      G3: { nome: nomiAttuali.G3, carte: mazzo.slice(16, 24), punti_fatti: 0, occupato: gameStateRef.current?.Players?.G3?.occupato || false, ping_count: gameStateRef.current?.Players?.G3?.ping_count || 0 },
+      G4: { nome: nomiAttuali.G4, carte: mazzo.slice(24, 32), punti_fatti: 0, occupato: gameStateRef.current?.Players?.G4?.occupato || false, ping_count: gameStateRef.current?.Players?.G4?.ping_count || 0 },
+      G5: { nome: nomiAttuali.G5, carte: mazzo.slice(32, 40), punti_fatti: 0, occupato: gameStateRef.current?.Players?.G5?.occupato || false, ping_count: gameStateRef.current?.Players?.G5?.ping_count || 0 },
     };
-
-    localStorage.removeItem(`briscola_player_${gameId}`);
 
     await updateGame({
       Players: nuoviPlayers,
@@ -132,9 +148,86 @@ function App() {
       semi_briscola: "",             
       seme_giro_attuale: ""          
     });
+  };
 
-    setLocalPlayerId(null);
-    alert("Mazzo mescolato e sbloccato!");
+  // Funzione per aprire il popup azzerando l'input precedente
+  const apriModalPassword = (tipo) => {
+    setPasswordInput('');
+    setModalConfig({ isOpen: true, type: tipo });
+  };
+
+  // VALIDATORE CENTRALE DELLA PASSWORD (CON INPUT OSCURATO)
+  const gestisciInviaPassword = async (e) => {
+    e.preventDefault(); 
+    const PASSWORD_SEGRETA = gameStateRef.current?.adminPassword || "Br1sc0l4!";
+
+    if (passwordInput !== PASSWORD_SEGRETA) {
+      alert("❌ Password errata!");
+      setModalConfig({ isOpen: false, type: '' });
+      return;
+    }
+
+    const tipoAzione = modalConfig.type;
+    setModalConfig({ isOpen: false, type: '' }); // Chiude il popup
+
+    if (tipoAzione === 'mazzo') {
+      const conferma = window.confirm("Password corretta. Vuoi procedere con la nuova distribuzione del mazzo?");
+      if (!conferma) return;
+      await eseguiMixEMazzo();
+      alert("Nuovo mazzo pronto! 🃏");
+    } 
+    else if (tipoAzione === 'sblocco') {
+      const conferma = window.confirm("Vuoi liberare il tavolo e avviare subito una nuova partita?");
+      if (!conferma) return;
+
+      const semi = ['O', 'C', 'S', 'B']; 
+      const mazzo = [];
+      for (const seme of semi) {
+        for (let valore = 1; valore <= 10; valore++) {
+          mazzo.push(`${seme}_${valore}`); 
+        }
+      }
+      for (let i = mazzo.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [mazzo[i], mazzo[j]] = [mazzo[j], mazzo[i]];
+      }
+
+      const resetCompleto = {
+        fase: 'asta',                  
+        giocatore_corrente: 'G1',       
+        punti_chiamata: 60,            
+        valore_chiamato: "",           
+        giocatori_passati: [],         
+        chiamante: "",                 
+        cronologia_tavolo: [],          
+        semi_briscola: "",             
+        seme_giro_attuale: "",
+        resetTimestamp: Date.now()
+      };
+
+      const ids = ['G1', 'G2', 'G3', 'G4', 'G5'];
+      ids.forEach((id, index) => {
+        const nomeAttuale = gameStateRef.current?.Players?.[id]?.nome || `Giocatore ${index + 1}`;
+        resetCompleto[`Players.${id}`] = {
+          nome: nomeAttuale,
+          carte: mazzo.slice(index * 8, (index + 1) * 8),
+          punti_fatti: 0,
+          occupato: false, 
+          ping_count: 0
+        };
+      });
+
+      localStorage.removeItem(`briscola_player_${gameId}`);
+      localStorage.removeItem(`briscola_login_time_${gameId}`);
+      setLocalPlayerId(null);
+
+      await updateGame(resetCompleto);
+      alert("Tavolo azzerato e nuove carte distribuite con successo! Puoi rientrare. 🟢");
+    }
+  };
+
+  const resetMazzoManoSuccessiva = async () => {
+    await eseguiMixEMazzo();
   };
 
   const eseguiLogout = async () => {
@@ -142,10 +235,11 @@ function App() {
       const backupId = localPlayerId;
       setLocalPlayerId(null);
       localStorage.removeItem(`briscola_player_${gameId}`);
+      localStorage.removeItem(`briscola_login_time_${gameId}`);
       try {
         await updateGame({ 
           [`Players.${backupId}.occupato`]: false,
-          [`Players.${backupId}.ultimo_ping`]: 0 
+          [`Players.${backupId}.ping_count`]: 0 
         });
       } catch (err) {
         console.error("Errore durante il logout:", err);
@@ -158,11 +252,13 @@ function App() {
 
   if (!localPlayerId) {
     const eseguiLoginGiocatore = async (id) => {
+      const oraLogin = Date.now();
       localStorage.setItem(`briscola_player_${gameId}`, id); 
+      localStorage.setItem(`briscola_login_time_${gameId}`, oraLogin.toString()); 
       setLocalPlayerId(id);
       await updateGame({ 
         [`Players.${id}.occupato`]: true,
-        [`Players.${id}.ultimo_ping`]: Date.now()
+        [`Players.${id}.ping_count`]: 1
       });
     };
 
@@ -201,21 +297,44 @@ function App() {
 
         <hr style={{ borderColor: '#334155', margin: '40px auto', maxWidth: '400px' }} />
         
-        <button 
-          onClick={gestisciDistribuzioneCarte} 
-          style={{ 
-            padding: '12px 25px', 
-            fontSize: '15px', 
-            backgroundColor: stanzaPiena ? '#475569' : '#3b82f6', 
-            color: stanzaPiena ? '#94a3b8' : 'white', 
-            border: 'none', 
-            borderRadius: '8px', 
-            cursor: stanzaPiena ? 'not-allowed' : 'pointer',
-            opacity: stanzaPiena ? 0.5 : 1
-          }}
-        >
-          {stanzaPiena ? "🔒 Reset Bloccato (Partita avviata)" : "🔄 Nuova Partita (Sblocca Tutti)"}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', maxWidth: '300px', margin: '0 auto' }}>
+          <button onClick={() => apriModalPassword('mazzo')} style={{ padding: '12px 25px', fontSize: '15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+            🔄 Nuova Partita (Mazzo)
+          </button>
+          <button onClick={() => apriModalPassword('sblocco')} style={{ padding: '12px 25px', fontSize: '15px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+            🔒 Sblocca Tutti i Posti (Admin)
+          </button>
+        </div>
+
+        {/* 🛡️ INTERFACCIA POPUP PASSWORD CON INPUT MASTATO */}
+        {modalConfig.isOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+            <form onSubmit={gestisciInviaPassword} style={{ backgroundColor: '#1e293b', padding: '30px', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: '320px', textAlign: 'center', border: '1px solid #334155' }}>
+              <h3 style={{ color: 'white', marginTop: 0, marginBottom: '15px', fontSize: '18px' }}>
+                {modalConfig.type === 'mazzo' ? "Distribuzione Nuovo Mazzo" : "Sblocco Amministratore"}
+              </h3>
+              <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '20px' }}>Inserisci la password di sicurezza:</p>
+              
+              <input 
+                type="password" 
+                autoFocus
+                placeholder="••••••••"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: 'white', fontSize: '18px', boxSizing: 'border-box', textAlign: 'center', marginBottom: '25px', letterSpacing: '3px' }}
+              />
+              
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button type="button" onClick={() => setModalConfig({ isOpen: false, type: '' })} style={{ padding: '10px 18px', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>
+                  Annulla
+                </button>
+                <button type="submit" style={{ padding: '10px 18px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>
+                  Conferma
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     );
   }
@@ -233,9 +352,9 @@ function App() {
       </header>
       <main>
         {(gameState.fase === 'asta' || gameState.fase === 'scelta_briscola') ? (
-          <BiddingOverlay gameState={gameState} localPlayerId={localPlayerId} updateGame={updateGame} />
+          <BiddingOverlay gameState={gameState} localPlayerId={localPlayerId} updateGame={updateGame} onNuovaPartita={resetMazzoManoSuccessiva} />
         ) : (
-          <GameBoard gameState={gameState} localPlayerId={localPlayerId} updateGame={updateGame} />
+          <GameBoard gameState={gameState} localPlayerId={localPlayerId} updateGame={updateGame} onNuovaPartita={resetMazzoManoSuccessiva} />
         )}
       </main>
     </div>

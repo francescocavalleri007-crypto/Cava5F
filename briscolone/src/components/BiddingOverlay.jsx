@@ -11,10 +11,36 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
 
   const valoreAttuale = gameState?.valore_chiamato || ''; 
   const puntiAttuali = gameState?.punti_chiamata || 60;     
-  const passati = gameState?.giocatori_passati || [];       
+  const passati = gameState?.giocatori_passati || [];      
   const indexAttuale = valoreAttuale ? ordineValori.indexOf(valoreAttuale) : -1;
 
   const [sceltaPunti, setSceltaPunti] = useState(puntiAttuali + 1);
+
+  // 🛠️ STATI AGGIUNTI SOLO PER PERMETTERE LA MODIFICA NELLA SCHERMATA DI BRISCOLA
+  const [modificaAttiva, setModificaAttiva] = useState(false);
+  const [cartaModificata, setCartaModificata] = useState(valoreAttuale || '1');
+  const [puntiModificati, setPuntiModificati] = useState(puntiAttuali || 60);
+
+  // Sincronizza i selettori quando cambia lo stato del gioco
+  useEffect(() => {
+    if (valoreAttuale) setCartaModificata(valoreAttuale);
+    if (puntiAttuali) setPuntiModificati(puntiAttuali);
+  }, [valoreAttuale, puntiAttuali]);
+
+  // 🛠️ INTERCETTAZIONE SILENTE: Se 4 hanno passato e nessuno ha chiamato, il client salva l'ultimo giocatore prima del blocco server
+  useEffect(() => {
+    if (passati.length === 4 && !passati.includes(localPlayerId) && !valoreAttuale) {
+      // Invia subito un'apertura tecnica standard (Asso a 60) a nome dell'ultimo giocatore.
+      // Questo sblocca il server e porta il gioco alla fase 'scelta_briscola' senza glitch.
+      updateGame({
+        valore_chiamato: '1',
+        punti_chiamata: 60,
+        chiamante: localPlayerId,
+        giocatore_corrente: localPlayerId,
+        fase: 'scelta_briscola'
+      });
+    }
+  }, [passati, valoreAttuale, localPlayerId]);
 
   useEffect(() => {
     setSceltaPunti(puntiAttuali + 1);
@@ -49,7 +75,7 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
       valore_chiamato: nuovoValore,
       punti_chiamata: 60, 
       giocatore_corrente: prossimoGiocatore,
-      chiamante: localPlayerId // Diventa provvisoriamente l'ultimo ad aver offerto una carta
+      chiamante: localPlayerId 
     });
   };
 
@@ -60,7 +86,7 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
     const aggiornamenti = {
       punti_chiamata: sceltaPunti,
       giocatore_corrente: prossimoGiocatore,
-      chiamante: localPlayerId // Diventa l'ultimo ad aver alzato la posta
+      chiamante: localPlayerId 
     };
 
     if (sceltaPunti === 120) {
@@ -94,9 +120,18 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
     await updateGame({
       semi_briscola: seme,
       fase: 'gioco',
-      socio: '', // Reset all'inizio del gioco
+      socio: '', 
       giocatore_corrente: gameState.chiamante 
     });
+  };
+
+  // 🛠️ FUNZIONE AGGIUNTA SOLO PER APPLICARE LA MODIFICA DELLA CARTA NELLA FASE FINALE
+  const handleApplicaModificaCarta = async () => {
+    await updateGame({
+      valore_chiamato: cartaModificata,
+      punti_chiamata: puntiModificati
+    });
+    setModificaAttiva(false);
   };
 
   if (gameState?.fase === 'scelta_briscola') {
@@ -105,7 +140,31 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
       <div className="bidding-overlay" style={{ background: '#1e293b', padding: '30px', borderRadius: '12px', color: 'white', maxWidth: '500px', margin: '20px auto', textAlign: 'center' }}>
         <h2>🏆 Asta Conclusa!</h2>
         <p>Vincitore dell'Asta: <strong>{giocatori[gameState.chiamante]?.nome || gameState.chiamante}</strong></p>
-        <p>Dichiarazione: <strong style={{ color: '#f59e0b' }}>{nomiValori[valoreAttuale]}</strong> a <strong style={{ color: '#3b82f6' }}>{puntiAttuali} punti</strong></p>
+        
+        {/* Sezione dichiarazione aggiornata con supporto alla modifica in tempo reale */}
+        <div style={{ background: '#0f172a', padding: '15px', borderRadius: '8px', margin: '15px 0' }}>
+          {modificaAttiva ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
+              <label style={{ fontSize: '12px', color: '#94a3b8' }}>Cambia la carta da cercare:</label>
+              <select value={cartaModificata} onChange={(e) => setCartaModificata(e.target.value)} style={{ padding: '6px', borderRadius: '4px', background: '#1e293b', color: 'white', border: '1px solid #475569' }}>
+                {ordineValori.map(v => <option key={v} value={v}>{nomiValori[v]}</option>)}
+              </select>
+              <label style={{ fontSize: '12px', color: '#94a3b8' }}>Cambia i punti della dichiarazione:</label>
+              <input type="number" min={60} max={120} value={puntiModificati} onChange={(e) => setPuntiModificati(Math.max(60, Math.min(120, parseInt(e.target.value, 10) || 60)))} style={{ padding: '6px', borderRadius: '4px', background: '#1e293b', color: 'white', border: '1px solid #475569', fontWeight: 'bold' }} />
+              <button onClick={handleApplicaModificaCarta} style={{ padding: '8px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Salva Modifiche</button>
+            </div>
+          ) : (
+            <>
+              <p style={{ margin: '5px 0' }}>Dichiarazione: <strong style={{ color: '#f59e0b' }}>{nomiValori[valoreAttuale]}</strong> a <strong style={{ color: '#3b82f6' }}>{puntiAttuali} punti</strong></p>
+              {isChiamante && passati.length === 4 && (
+                <button onClick={() => setModificaAttiva(true)} style={{ background: 'none', border: 'none', color: '#a855f7', cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', marginTop: '5px' }}>
+                  ✏️ Modifica carta o punti prima di scegliere il seme
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
         {isChiamante ? (
           <div style={{ marginTop: '25px', background: '#0f172a', padding: '20px', borderRadius: '8px' }}>
             <h3 style={{ color: '#10b981', margin: '0 0 15px 0' }}>Scegli il Seme di Briscola (Verrà nascosto al 1° giro):</h3>
@@ -145,7 +204,7 @@ export function BiddingOverlay({ gameState, localPlayerId, updateGame }) {
               {valoreAttuale !== '2' && (
                 <div style={{ border: '1px solid #334155', padding: '12px', borderRadius: '8px' }}>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: '#cbd5e1' }}>
-                    Offri una carta inferiore (Batte i {puntiAttuali} punti attuali e resetta a 60):
+                    Offri una carta inferior (Batte i {puntiAttuali} punti attuali e resetta a 60):
                   </label>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                     {ordineValori.slice(indexAttuale + 1).map((val) => (

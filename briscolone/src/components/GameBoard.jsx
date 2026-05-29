@@ -215,13 +215,44 @@ export function GameBoard({ gameState, localPlayerId, updateGame }) {
         </p>
       </div>
 
+      {/* 📊 MONITOR GIOCATORI: FISSO, ILLUMINATO E CON PUNTEGGI CIECHI SE NON SEI TU 🕶️ */}
       <div className="players-scores" style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px', flexWrap: 'wrap' }}>
-        {Object.entries(giocatori).map(([id, dati]) => (
-          <div key={id} style={{ background: gameState?.giocatore_corrente === id ? '#047857' : '#1e293b', padding: '10px 15px', borderRadius: '8px', textAlign: 'center', border: localPlayerId === id ? '2px solid #3b82f6' : 'none' }}>
-            <div style={{ fontWeight: 'bold' }}>{dati.nome} {localPlayerId === id && "(Tu)"}</div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b', marginTop: '4px' }}>🏆 Punti: {dati.punti_fatti || 0}</div>
-          </div>
-        ))}
+        {['G1', 'G2', 'G3', 'G4', 'G5'].map((id) => {
+          const dati = giocatori[id];
+          if (!dati) return null;
+
+          const isTurnoAttuale = gameState?.giocatore_corrente === id;
+          const isMe = localPlayerId === id;
+
+          return (
+            <div 
+              key={id} 
+              style={{ 
+                background: isTurnoAttuale ? '#10b981' : '#1e293b', 
+                padding: '10px 15px', 
+                borderRadius: '8px', 
+                textAlign: 'center', 
+                border: isMe ? '2px solid #3b82f6' : '1px solid #334155',
+                color: isTurnoAttuale ? '#0f172a' : 'white', 
+                boxShadow: isTurnoAttuale ? '0 0 20px rgba(16, 185, 129, 0.6)' : 'none',
+                transform: isTurnoAttuale ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <div style={{ fontWeight: 'bold' }}>
+                {dati.nome} {isMe && "(Tu)"}
+              </div>
+              <div style={{ 
+                fontSize: '18px', 
+                fontWeight: 'bold', 
+                color: isTurnoAttuale ? '#0f172a' : '#f59e0b', 
+                marginTop: '4px' 
+              }}>
+                🏆 Punti: {isMe ? (dati.punti_fatti || 0) : '❓'}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="table-center" style={{ background: '#064e3b', padding: '25px', borderRadius: '15px', minHeight: '260px' }}>
